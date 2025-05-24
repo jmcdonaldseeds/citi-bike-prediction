@@ -46,12 +46,12 @@ This project analyzes and predicts trip durations from NYC's Citi Bike system us
 **File**: [`citibike-prediction.py`](citibike-prediction.py)
 
 ### Features:
-- Cleans and transforms data using `pandas`
-- Splits data into training and testing sets
-- Builds and evaluates models using:
-  - Linear regression
-  - Decision tree regressor
-- Compares results to a naive baseline (mean-only predictor)
+- Loads and processes Citi Bike trip data using `pandas`, including time and location-based feature engineering
+- Applies feature scaling to improve model performance
+- Trains a gradient boosting regression model (`GradientBoostingRegressor`) to predict trip duration
+- Evaluates performance using RMSE and compares against a naive mean-based baseline
+- Visualizes residual patterns and analyzes model error distribution
+- Generates trip density heatmaps to identify high-demand areas and temporal usage trends
 
 ---
 
@@ -60,16 +60,7 @@ This project analyzes and predicts trip durations from NYC's Citi Bike system us
 - Casual riders take longer trips than members
 - Trips on weekends are ~1.6 minutes longer on average
 - Hour of day has a small, positive effect on trip duration
-- R² values are low, suggesting more predictors (e.g., location, weather) are needed for stronger models
-
----
-
-## Future Improvements
-
-- Add geospatial features (station location, trip distance)
-- Include weather data (rain, temperature, wind)
-- Create heatmaps of demand by time and station
-- Try advanced models (e.g., Random Forests, XGBoost)
+- R² values are low, suggesting more predictors (e.g., age, weather) are needed for stronger models
 
 ---
 
