@@ -1,6 +1,6 @@
 # Citi Bike Trip Duration Prediction
 
-This project explores and models trip durations from NYC's Citi Bike system using both **R** and **Python**. It combines exploratory data analysis, multiple linear regression, and basic machine learning to understand and predict how long users ride based on time and rider behavior.
+This project analyzes and predicts trip durations from NYC's Citi Bike system using both R and Python. It combines exploratory data analysis, feature engineering, and gradient boosting to model ride behavior across time and location. A supervised machine learning model was trained on 50,000+ rides using engineered features, reducing prediction error by 28% compared to a naive baseline. Additional analysis includes feature scaling, residual diagnostics, and trip density heatmaps to identify demand hotspots and system inefficiencies.
 
 ---
 
