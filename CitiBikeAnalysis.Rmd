@@ -1,0 +1,237 @@
+---
+title: "Citi Bike: Data Analysis"
+author: "Justin McDonald"
+date: "2024-03-20"
+output: html_document
+---
+
+# Introduction
+Urban bike-sharing systems like NYC’s Citi Bike offer a unique lens into how people move through a city. With thousands of rides logged daily, patterns in trip duration can reveal not only commuting behavior, but also the impact of rider demographics, user types, and time-based factors. This project explores what drives trip duration and whether it can be predicted based on available ride attributes.
+
+The motivation behind this analysis comes from an interest in urban mobility and how simple, interpretable models can uncover insights in transportation data. My hypothesis is that user type (subscriber vs. customer), bike type, and time significantly influence trip length. Using statistical testing and machine learning (regression trees), I aim to understand these patterns and evaluate the potential for trip duration prediction in real-world applications.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(moderndive)
+library(tidyverse)
+library(readr)
+library(ggmap)
+library(scales)
+
+CitiData <- read.csv("/Users/justin/Downloads/202408-citibike-tripdata/202408-citibike-tripdata_3.csv")
+
+# Random Sample of 50,000 trips from the dataset
+set.seed(42)
+CitiData.50k <- CitiData[sample(nrow(CitiData), 50000), ]
+write.csv(CitiData.50k, "CitiData.50k.csv", row.names = FALSE)
+```
+
+```{r FurtherSetup, include=FALSE}
+# Feature Engineering: Add time-based features
+CitiData.50k <- CitiData.50k %>%
+  mutate(
+    started_at = ymd_hms(started_at),
+    ended_at = ymd_hms(ended_at),
+    trip_duration = as.numeric(difftime(ended_at, started_at, units = "mins")),
+    hour = hour(started_at),
+    day_of_week = wday(started_at, label = TRUE),
+    is_weekend = day_of_week %in% c("Sat", "Sun")
+  ) %>%
+  filter(trip_duration > 1, trip_duration < 60)
+```
+
+# My Data Analysis
+
+### Distribution of Trip Durations
+This section visualizes how long Citi Bike trips typically last. Using ggplot2, I create a histogram that shows the distribution of trip durations within the sampled data. This helps uncover the most common trip lengths and spot any potential outliers or skewness in the data.
+
+```{r Distribution, echo = FALSE}
+ggplot(CitiData.50k, aes(x = trip_duration)) +
+  geom_histogram(bins = 50, fill = "steelblue", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of Trip Durations", x = "Trip Duration (minutes)")
+```
+
+The majority of trips are short, typically under 20 minutes, with the most common duration between 5 and 10 minutes. The distribution is right-skewed, meaning a small number of trips are significantly longer. This visualization helps identify patterns in typical trip lengths and suggests that most users take quick, short-distance rides.
+
+### Average Trip Duration by Bike Type
+In this section, I investigate whether the type of bike used—such as electric or classic—affects how long each trip lasts on average. I group the data by rideable_type using dplyr and calculate the mean trip duration for each group. Then, I create a bar chart using ggplot2 to compare the results visually. To improve clarity, I also display exact average values above each bar and adjust the y-axis to highlight even small differences. This helps assess whether certain bike types are associated with longer or shorter rides.
+```{r TripDuration, echo = FALSE}
+CitiData.50k %>%
+  group_by(rideable_type) %>%
+  summarize(avg_duration = mean(trip_duration)) %>%
+  ggplot(aes(x = rideable_type, y = avg_duration, fill = rideable_type)) +
+  geom_col() +
+  geom_text(aes(label = round(avg_duration, 2)), vjust = -0.5) +
+  labs(title = "Average Trip Duration by Bike Type", x = "Bike Type", y = "Average Duration (min)") + scale_y_continuous(labels = label_number(accuracy = 0.1))
+```
+
+The bar chart reveals that electric bikes have a slightly longer average trip duration (12.64 minutes) compared to classic bikes (12.53 minutes), though the difference is small. This may suggest that electric bikes are used for similar trip types or that speed differences balance out with trip length.
+
+### Average Trip Duration by User Type
+In this section, I analyze how trip duration varies between different user types, such as subscribers and casual riders. Using dplyr, I group the data by member_casual and calculate the average trip duration for each group. I then visualize the results with a bar chart using ggplot2, which makes it easy to compare riding behavior between user categories. This helps reveal whether one user type tends to take longer or shorter trips on average.
+
+```{r TripDuration2, echo = FALSE}
+# Average trip duration by user type
+avg_duration_user <- CitiData.50k %>%
+  group_by(member_casual) %>%
+  summarize(avg_duration = mean(trip_duration, na.rm = TRUE))
+
+# Bar chart 
+ggplot(avg_duration_user, aes(x = member_casual, y = avg_duration, fill = member_casual)) +
+  geom_col() +
+  geom_text(aes(label = round(avg_duration, 2)), vjust = -0.5) +
+  labs(
+    title = "Average Trip Duration by User Type",
+    x = "User Type",
+    y = "Average Duration (min)")
+```
+
+The graph shows that casual users take longer trips on average (16.37 minutes) compared to members (11.5 minutes). This supports the idea that casual riders may use bikes for leisure, while members likely use them for quick commutes.
+
+### Impact of Hour of Day On Duration
+I use simple linear regression to explore whether the time of day a ride starts influences its duration. I fit a model using trip_duration as the response variable and hour as the predictor. The regression output allows me to examine whether there’s a statistically significant trend—such as longer trips during early mornings or late evenings. This analysis helps identify behavioral patterns related to commuting hours, leisure times, or off-peak travel.
+
+```{r Regression, echo = FALSE}
+model1 <- lm(trip_duration ~ hour, data = CitiData.50k)
+summary(model1)
+```
+
+### Impact (Continued...) w/ Multiple Regression
+I extend the previous model by including additional predictors—is_weekend and rideable_type—to examine their combined effect on trip duration. This multiple regression model helps isolate the individual contributions of each factor while controlling for others. For example, it can tell us whether trips are longer on weekends even after accounting for the hour of the day and bike type. This broader model provides a more realistic and nuanced understanding of what influences how long Citi Bike users ride.
+
+```{r Regression2, echo = FALSE}
+model2 <- lm(trip_duration ~ hour + is_weekend + rideable_type, data = CitiData.50k)
+summary(model2)
+```
+
+Despite the statistically significant results, the Adjusted R² is only 0.0074, meaning the model explains less than 1% of the variability in trip duration. This indicates that while time and weekend usage patterns influence duration, most variation is driven by other unmeasured factors, such as individual rider behavior, route, or trip purpose.
+The simple linear regression model suggests that trip duration slightly increases as the hour of day increases. The coefficient for hour is 0.084, meaning that for every one-hour increase in the start time, the trip duration increases by about 0.08 minutes (approximately 5 seconds), on average.
+
+This relationship is statistically significant (p < 0.001), but the effect size is very small, and the model explains only a tiny fraction of the variance in trip duration (Adjusted R² = 0.0019). This indicates that while time of day does have a measurable effect, it is not a strong predictor of trip duration on its own.
+
+### Residual Analysis
+To evaluate the quality of the regression model, I plot its residuals (the difference between predicted and actual trip durations). A well-behaved model should have residuals randomly scattered around zero, without clear patterns or funnel shapes.
+
+```{r Residuals, echo = FALSE}
+CitiData.50k$residuals <- residuals(model2)
+CitiData.50k$predicted <- predict(model2)
+
+ggplot(CitiData.50k, aes(x = predicted, y = residuals)) +
+  geom_point(alpha = 0.3) +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Residuals vs. Fitted Values",
+       x = "Predicted Trip Duration (min)",
+       y = "Residuals") +
+  theme_minimal()
+
+ggplot(CitiData.50k, aes(x = residuals)) +
+  geom_histogram(bins = 50, fill = "steelblue", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of Residuals",
+       x = "Residual (Actual - Predicted)",
+       y = "Count") +
+  theme_minimal()
+```
+
+The Residuals vs. Fitted plot shows residuals scattered around zero, suggesting no major issues with linearity or bias. However, the vertical striping indicates the model predicts a narrow range of durations, reflecting limited predictive power.
+
+The Histogram of Residuals is right-skewed, with many small errors and a long tail of large underpredictions. This mirrors the skewed distribution of trip durations and shows the model struggles with unusually long rides.
+
+### Start & End Stations by AVG. Trip Duration & Location Heatmap
+In this section, I explore the impact of geographic station locations on trip behavior by examining both the average trip durations associated with individual stations and the overall spatial distribution of trip activity across New York City.
+
+First, I identify the top 10 start and end stations based on average trip duration, filtering out stations with low usage to ensure meaningful comparisons. This helps highlight locations that may attract longer or more leisurely rides, such as parks, waterfronts, or low-density areas.
+
+Next, I visualize trip volume through spatial density heatmaps overlaid on a real NYC map. These heatmaps reveal geographic hotspots where trips are most frequently initiated or concluded, offering insight into urban mobility patterns, commuter flow, and potential service imbalances.
+
+
+```{r StartStations, echo = FALSE}
+start_station_summary <- CitiData.50k %>%
+  group_by(start_station_name) %>%
+  summarize(avg_duration = mean(trip_duration, na.rm = TRUE), count = n()) %>%
+  filter(count > 50) %>%  # filter to remove small sample stations
+  arrange(desc(avg_duration)) %>%
+  slice_head(n = 10)
+
+ggplot(start_station_summary, aes(x = reorder(start_station_name, avg_duration), y = avg_duration)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Top 10 Start Stations by Avg Trip Duration",
+       x = "Start Station", y = "Average Duration (min)")
+```
+
+```{r EndStations, echo = FALSE}
+end_station_summary <- CitiData.50k %>%
+  group_by(end_station_name) %>%
+  summarize(avg_duration = mean(trip_duration, na.rm = TRUE), count = n()) %>%
+  filter(count > 50) %>%
+  arrange(desc(avg_duration)) %>%
+  slice_head(n = 10)
+
+ggplot(end_station_summary, aes(x = reorder(end_station_name, avg_duration), y = avg_duration)) +
+  geom_col(fill = "darkgreen") +
+  coord_flip() +
+  labs(title = "Top 10 End Stations by Avg Trip Duration",
+       x = "End Station", y = "Average Duration (min)")
+```
+
+```{r HeatMap, echo = FALSE}
+CitiCoords <- CitiData.50k %>%
+  filter(!is.na(start_lat), !is.na(start_lng))
+
+bbox <- c(left = -74.03, bottom = 40.68, right = -73.92, top = 40.82)
+
+register_stadiamaps(key = "91b6f71a-0ce5-4921-8d04-7402fffa3709")
+
+nyc_map <- get_stadiamap(bbox = bbox, zoom = 13, maptype = "stamen_toner_lite")
+
+ggmap(nyc_map) +
+  stat_density2d(
+    data = CitiCoords,
+    aes(x = start_lng, y = start_lat, fill = ..level.., alpha = ..level..),
+    geom = "polygon", bins = 30) + scale_fill_viridis_c(option = "C") + guides(alpha = "none") + labs(
+    title = "Trip Start Density Over NYC Map",
+    x = "Longitude",
+    y = "Latitude",
+    fill = "Trip Density") +
+  theme_minimal()
+
+ggmap(nyc_map) +
+  stat_density2d(
+    data = CitiCoords,
+    aes(x = end_lng, y = end_lat, fill = ..level.., alpha = ..level..),
+    geom = "polygon", bins = 30) + scale_fill_viridis_c(option = "C") + guides(alpha = "none") + labs(
+    title = "Trip End Density Over NYC Map",
+    x = "Longitude",
+    y = "Latitude",
+    fill = "Trip Density") +
+  theme_minimal()
+```
+
+The comparison reveals that most Citi Bike traffic is concentrated in Manhattan, especially in areas where transit, tourism, and business intersect. These insights can help identify service bottlenecks, inform station placement, and optimize bike redistribution efforts.
+
+### Model Accuracy: RMSE Comparison vs. Naive Baseline
+To evaluate how well the regression model predicts trip duration, I compare its performance against a naive baseline model that simply predicts the mean trip duration for every ride.
+
+Using Root Mean Squared Error (RMSE), a common metric for prediction accuracy, I assess how much error remains after using time- and bike-based predictors.
+
+```{r Accuracy, echo = FALSE}
+baseline_pred <- mean(CitiData.50k$trip_duration)
+baseline_rmse <- sqrt(mean((CitiData.50k$trip_duration - baseline_pred)^2))
+
+model_preds <- predict(model2)
+model_rmse <- sqrt(mean((CitiData.50k$trip_duration - model_preds)^2))
+
+improvement <- (baseline_rmse - model_rmse) / baseline_rmse * 100
+
+data.frame(
+  Baseline_RMSE = round(baseline_rmse, 2),
+  Model_RMSE = round(model_rmse, 2),
+  Percent_Improvement = round(improvement, 2))
+```
+
+This results in a 0.37% improvement in predictive accuracy over the baseline. While the gain is small, it confirms that the model captures a tiny but real portion of the variance in trip duration. 
+
+### Conclusion
+
+This project analyzed 50,000 Citi Bike rides to explore what influences trip duration and whether it can be predicted using available features. I found that casual riders take longer trips than members, and electric bikes are associated with slightly longer durations than classic bikes. While time of day and weekend status were statistically significant predictors in a regression model, the overall predictive power was weak (Adjusted R² ≈ 0.007), and the model only improved prediction accuracy by 0.37% over a naive baseline. Residual analysis confirmed that the model struggles with longer trips and captures only a small portion of the variation. Still, the analysis revealed meaningful patterns in rider behavior and station activity that could support planning and operations.
